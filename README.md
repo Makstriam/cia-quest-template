@@ -89,17 +89,9 @@ All files open in a built-in overlay viewer — players never leave the terminal
 
 ![Terminal Log](docs/screenshots/screenshot-terminal.png)
 
-The terminal log has two layers.
+The terminal log shows the session history — previous logins, access attempts, errors — and logs all player actions in real time. It creates a natural record of progress and doubles as atmospheric storytelling.
 
-The **static history** (configured in `TERMINAL_HISTORY`) shows events that happened before the players arrived — previous logins, access attempts, error messages. Use it to plant a clue or imply that something went wrong before the session began.
-
-**Live session events** are logged automatically as players interact — unlocking folders, running commands, failed password attempts. This creates a natural record of progress.
-
-At the bottom is the **command line**. Players can type commands to interact with the terminal. Public commands include `help`, `ping`, `whoami`, `status`, and `ls`. Custom commands with their own replies can be added — useful for Easter eggs, hidden clues, or lore.
-
-The most important command is `restore` — it opens the authentication quiz in a new tab.
-
-The `override` command is hidden from the help list and invisible to players. It gives the host full control: unlock folders, reveal passwords, skip the quiz, reset the session.
+At the bottom is the **command line**. Players type commands to interact with the terminal — discover intel, check status, trigger events. There are public commands visible via `help`, custom easter egg commands you can add, and a hidden `override` command for the host to unlock folders, reveal passwords, or reset the session on the fly.
 
 ---
 
@@ -107,19 +99,9 @@ The `override` command is hidden from the help list and invisible to players. It
 
 ![Authentication Quiz](docs/screenshots/screenshot-quiz.png)
 
-The quiz is a separate page (`quiz.html`) opened via the `restore` terminal command. Players answer a series of questions; up to 2 wrong answers are allowed before the protocol resets. On passing, a success screen appears and links back to the main terminal.
+The quiz is a separate page (`quiz.html`) opened via the `restore` terminal command. Players answer questions based on evidence gathered during the quest — the quiz is the logical payoff. Up to 2 wrong answers are allowed before the protocol resets. On passing, a success screen appears and links back to the main terminal.
 
-Write questions that test knowledge gathered during the quest — a code found in a folder, a name from a document, a detail from a video. The quiz is the payoff for engaging with the evidence.
-
-**Sound system — live actor cues and atmosphere**
-
-The quiz plays sounds on a configurable timer. Sounds can serve different purposes:
-
-- **Live actor cues** — each sound is a signal for a specific performer. Sound 1 fires, Actor A enters. The sequence is scripted and precise. Set the number of sounds to match the number of actors.
-- **Atmospheric pressure** — ambient sounds (static, rumbles, distant tones) play at random intervals to build tension without cueing any real-world action.
-- **Mixed** — some sounds are scripted actor cues, others loop randomly throughout.
-
-To disable sounds entirely, set `SOUND_FILES = []`.
+The quiz also has a **sound system** — sounds play on a scripted then randomised timer. Use them as atmospheric pressure during the quiz, or as precise cues for live actors: Sound 1 fires, Actor A enters.
 
 ---
 
@@ -189,7 +171,7 @@ Demo walkthrough with passwords and answers: [`docs/DEMO.md`](docs/DEMO.md)
 └── docs/
     ├── MANUAL.md    — full configuration reference
     ├── DEMO.md      — demo passwords, quiz answers, and GM commands
-    └── screenshot.png
+    └── screenshots/
 ```
 
 ---
