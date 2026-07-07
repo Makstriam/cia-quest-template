@@ -3,7 +3,7 @@
 > An interactive detective quest template with a CIA terminal aesthetic.  
 > Drop in your own files, set passwords, and run a quest — no coding required.
 
-![screenshot](docs/screenshot.png)
+![screenshot](docs/screenshots/screenshot.png)
 <!-- Replace with an actual screenshot before publishing -->
 
 ---
@@ -54,7 +54,7 @@
 
 ### Dashboard
 
-![Dashboard](docs/screenshot-dashboard.png)
+![Dashboard](docs/screenshots/screenshot-dashboard.png)
 
 The dashboard is the first thing players see. It sets the tone for the entire quest.
 
@@ -66,7 +66,7 @@ The dashboard is the first thing players see. It sets the tone for the entire qu
 
 ### Case Files
 
-![Case Files](docs/screenshot-folders.png)
+![Case Files](docs/screenshots/screenshot-folders.png)
 
 Case Files are the core of the quest. Each folder is a locked container of evidence that players unlock with a password.
 
@@ -88,7 +88,7 @@ All files open in a built-in overlay viewer — players never leave the terminal
 
 ### Terminal Log
 
-![Terminal Log](docs/screenshot-terminal.png)
+![Terminal Log](docs/screenshots/screenshot-terminal.png)
 
 The terminal log has two layers.
 
@@ -106,7 +106,7 @@ The `override` command is hidden from the help list and invisible to players. It
 
 ### Authentication Quiz
 
-![Authentication Quiz](docs/screenshot-quiz.png)
+![Authentication Quiz](docs/screenshots/screenshot-quiz.png)
 
 The quiz is a separate page (`quiz.html`) opened via the `restore` terminal command. Players answer a series of questions; up to 2 wrong answers are allowed before the protocol resets. On passing, a success screen appears and links back to the main terminal.
 
@@ -126,7 +126,7 @@ To disable sounds entirely, set `SOUND_FILES = []`.
 
 ### Progress and Notes
 
-![Sidebar](docs/screenshot-sidebar.png)
+![Sidebar](docs/screenshots/screenshot-sidebar.png)
 
 The **access level indicator** in the sidebar shows unlocked folders as a fraction and as a dot-bar. It updates automatically.
 
