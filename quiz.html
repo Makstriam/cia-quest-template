@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SYSTEM RESTORE — AUTHENTICATION REQUIRED</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --green: #00ff41;
+    --green-dim: #00a82b;
+    --green-dark: #003d0f;
+    --red: #ff3c3c;
+    --amber: #ffb300;
+    --bg: #050a05;
+    --panel: #080f08;
+    --border: #1a3a1a;
+  }
+
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+
+  body {
+    background: var(--bg);
+    color: var(--green);
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    font-size: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* scanlines */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.13) 2px, rgba(0,0,0,0.13) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* CRT flicker */
+  @keyframes flicker { 0%,100%{opacity:1} 92%{opacity:1} 93%{opacity:.85} 94%{opacity:1} 96%{opacity:.9} 97%{opacity:1} }
+  body { animation: flicker 8s infinite; }
+
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* ── MAIN BOX ── */
+  .box {
+    border: 1px solid var(--green-dim);
+    background: var(--panel);
+    width: min(700px, 92vw);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 40px rgba(0,255,65,0.1);
+    position: relative;
+  }
+  .box::before {
+    content: 'SYSTEM RESTORE PROTOCOL v2.1';
+    position: absolute;
+    top: -1px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--panel);
+    padding: 0 14px;
+    font-size: 10px;
+    color: var(--green-dim);
+    letter-spacing: 3px;
+    white-space: nowrap;
+  }
+
+  .box-header {
+    border-bottom: 1px solid var(--border);
+    padding: 16px 20px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .box-title { font-size: 16px; letter-spacing: 4px; text-shadow: 0 0 8px var(--green); }
+  .box-meta  { font-size: 10px; color: var(--green-dim); text-align: right; line-height: 1.8; }
+
+  /* progress bar */
+  .progress-wrap { padding: 10px 20px 0; }
+  .progress-label { font-size: 10px; color: var(--green-dim); letter-spacing: 2px; margin-bottom: 5px; }
+  .progress-track { height: 3px; background: var(--green-dark); border: 1px solid var(--border); }
+  .progress-fill  { height: 100%; background: var(--green); width: 0%; transition: width 0.4s; box-shadow: 0 0 6px var(--green); }
+
+  /* question area */
+  .q-area {
+    padding: 24px 24px 16px;
+    flex: 1;
+    overflow-y: auto;
+  }
+  .q-number { font-size: 10px; color: var(--green-dim); letter-spacing: 2px; margin-bottom: 10px; }
+  .q-text   { font-size: 15px; line-height: 1.8; margin-bottom: 22px; color: #d4f5d4; }
+
+  .choice {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .choice:hover        { border-color: var(--green-dim); background: rgba(0,255,65,0.04); }
+  .choice.selected     { border-color: var(--green); background: rgba(0,255,65,0.08); }
+  .choice.correct      { border-color: var(--green); background: rgba(0,255,65,0.15); color: var(--green); }
+  .choice.wrong        { border-color: var(--red);   background: rgba(255,60,60,0.1);  color: var(--red); }
+  .choice .key         { color: var(--amber); flex-shrink: 0; font-size: 14px; }
+
+  .hint-row {
+    margin-top: 12px;
+    font-size: 11px;
+    color: var(--green-dim);
+    letter-spacing: 1px;
+    min-height: 16px;
+  }
+  .hint-row.warn  { color: var(--amber); }
+  .hint-row.error { color: var(--red); }
+
+  /* attempts */
+  .attempts-row {
+    padding: 0 24px 16px;
+    font-size: 11px;
+    color: var(--green-dim);
+    letter-spacing: 1px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .attempt-dot { width: 8px; height: 8px; border: 1px solid var(--green-dim); }
+  .attempt-dot.used { background: var(--red); border-color: var(--red); }
+
+  /* ── OVERLAY SCREENS ── */
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.92);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 20px;
+    text-align: center;
+    padding: 24px;
+  }
+  .overlay.active { display: flex; }
+  .overlay-title  { font-size: 24px; letter-spacing: 6px; text-shadow: 0 0 16px currentColor; }
+  .overlay-sub    { font-size: 12px; color: var(--green-dim); letter-spacing: 2px; line-height: 2; max-width: 500px; }
+  .overlay-btn {
+    border: 1px solid var(--green);
+    color: var(--green);
+    background: transparent;
+    font-family: inherit;
+    font-size: 13px;
+    letter-spacing: 3px;
+    padding: 10px 28px;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-top: 8px;
+  }
+  .overlay-btn:hover { background: rgba(0,255,65,0.1); }
+  .overlay-btn.red   { border-color: var(--red); color: var(--red); }
+  .overlay-btn.red:hover { background: rgba(255,60,60,0.1); }
+
+  /* ── ALERT FLASH ── */
+  @keyframes alertFlash {
+    0%   { opacity: 0; }
+    10%  { opacity: 1; }
+    40%  { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  .alert-flash {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(255,0,0,0.18);
+    pointer-events: none;
+    z-index: 50;
+  }
+  .alert-flash.active { display: block; animation: alertFlash 0.9s ease forwards; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--green-dark); }
+</style>
+</head>
+<body>
+
+<!-- RED FLASH on sound attack -->
+<div class="alert-flash" id="alert-flash"></div>
+
+<!-- ══ MAIN QUIZ BOX ══ -->
+<div class="box">
+  <div class="box-header">
+    <div class="box-title">SYSTEM RESTORE</div>
+    <div class="box-meta">
+      <div>AUTHENTICATION PROTOCOL</div>
+      <div id="clock-mini" style="color:var(--green)">--:--:-- UTC</div>
+    </div>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-label">VERIFICATION PROGRESS: <span id="prog-label">0 / 20</span></div>
+    <div class="progress-track"><div class="progress-fill" id="prog-fill"></div></div>
+  </div>
+
+  <div class="q-area" id="q-area">
+    <!-- questions are rendered here -->
+  </div>
+
+  <div class="hint-row" id="hint-row" style="padding:0 24px 6px"></div>
+
+  <div class="attempts-row">
+    ATTEMPTS LEFT:
+    <div class="attempt-dot" id="dot-0"></div>
+    <div class="attempt-dot" id="dot-1"></div>
+  </div>
+</div>
+
+<!-- ── SCREENS ── -->
+<div class="overlay" id="screen-start">
+  <div class="overlay-title" style="color:var(--amber)">⚠ RESTORE REQUIRED</div>
+  <div class="overlay-sub">
+    System integrity compromised. To regain access,<br>
+    complete the identity verification protocol.<br><br>
+    Answer all questions correctly. Up to 2 wrong answers<br>
+    are allowed — exceeding the limit restarts the protocol.
+  </div>
+  <button class="overlay-btn" onclick="startQuiz()">▶ BEGIN VERIFICATION</button>
+</div>
+
+<div class="overlay" id="screen-fail">
+  <div class="overlay-title" style="color:var(--red)">✕ ACCESS DENIED</div>
+  <div class="overlay-sub">
+    Error limit exceeded.<br>
+    Verification protocol restarted.
+  </div>
+  <button class="overlay-btn red" onclick="restartQuiz()">↺ RESTART</button>
+</div>
+
+<div class="overlay" id="screen-win">
+  <div class="overlay-title" style="color:var(--green)">✔ ACCESS RESTORED</div>
+  <div class="overlay-sub">
+    Verification passed successfully.<br>
+    System access has been restored.<br><br>
+    <span id="win-stats" style="color:var(--green-dim)"></span>
+  </div>
+  <button class="overlay-btn" onclick="window.close()">✕ CLOSE</button>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+//  SOUNDS — place files in the sounds/ folder next to quiz.html
+//  Supported formats: .mp3 / .wav / .ogg
+// ══════════════════════════════════════════════════════════════════
+const SOUND_FILES = [
+  'sounds/sound1.wav',
+  'sounds/sound2.wav',
+  'sounds/sound3.wav',
+  'sounds/sound4.wav',
+];
+
+// SOUND SCRIPT: [sound number (1-based), delay in seconds after the previous entry]
+// First entry fires after the delay from start. After the list ends — random mode.
+const SOUND_SCRIPT = [
+  [1, 3],
+  [2, 3],
+  [3, 3],
+  [4, 3],
+  [1, 1.5],
+  [2, 1.5],
+  [3, 1.5],
+];
+
+// Random mode interval range (seconds). null = auto-calculated from SOUND_SCRIPT.
+const RANDOM_MIN = null;  // null or a number, e.g. 15
+const RANDOM_MAX = 20;  // null or a number, e.g. 60
+
+// ══════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════
+//  QUESTIONS — edit here
+//  q       — question text
+//  a/b/c   — answer choices
+//  correct — correct answer: "a", "b" or "c"
+// ══════════════════════════════════════════════════════════════════
+const QUESTIONS = [
+  // ── Replace these questions with your own quest content ──
+  // ── This is a 5-question demo; add more entries to extend the quiz ──
+  {
+    q: "Q1: Which encryption algorithm is active on this terminal?",
+    a: "RSA-1024",
+    b: "AES-256",
+    c: "DES-128",
+    correct: "b"
+  },
+  {
+    q: "Q2: What clearance level is required to access folder #04?",
+    a: "LEVEL 2",
+    b: "LEVEL 3",
+    c: "LEVEL 4",
+    correct: "c"
+  },
+  {
+    q: "Q3: What is the current version of the document management system?",
+    a: "v3.1.0",
+    b: "v5.0.1",
+    c: "v4.7.2",
+    correct: "c"
+  },
+  {
+    q: "Q4: What is the number of the agent running the current session?",
+    a: "#5501",
+    b: "#7714",
+    c: "#3302",
+    correct: "b"
+  },
+  {
+    q: "Q5: How many case file folders are in the system?",
+    a: "3",
+    b: "5",
+    c: "2",
+    correct: "c"
+  },
+];
+// ══════════════════════════════════════════════════════════════════
+
+// ── STATE ──
+const MAX_WRONG = 2;
+let currentQ    = 0;
+let wrongCount  = 0;
+let locked      = false;
+let quizStarted = false;
+let soundsStarted = false;
+let soundStartTime = null; // set once on first start, never reset on restart
+
+// ── SOUND SETUP ──
+const audioElements = SOUND_FILES.map(src => {
+  const a = new Audio(src);
+  a.preload = 'auto';
+  return a;
+});
+
+function playSound(index) {
+  const audio = audioElements[index];
+  audio.currentTime = 0;
+  audio.play().catch(() => {});
+  flashAlert();
+}
+
+function flashAlert() {
+  const el = document.getElementById('alert-flash');
+  el.classList.remove('active');
+  void el.offsetWidth;
+  el.classList.add('active');
+  setTimeout(() => el.classList.remove('active'), 900);
+}
+
+// ── RANDOM RANGE CALCULATION ──
+// Returns { min, max } in ms for the random phase.
+// If RANDOM_MIN/RANDOM_MAX are set — uses them directly.
+// Otherwise analyses SOUND_SCRIPT: finds inter-occurrence gaps per sound,
+// takes the global min/max with a ±20% buffer.
+function computeRandomRange() {
+  if (RANDOM_MIN !== null && RANDOM_MAX !== null) {
+    return { min: RANDOM_MIN * 1000, max: RANDOM_MAX * 1000 };
+  }
+  // accumulate absolute timestamps for each sound (in seconds)
+  const times = {}; // soundId → [t1, t2, ...]
+  let t = 0;
+  for (const [id, delay] of SOUND_SCRIPT) {
+    t += delay;
+    if (!times[id]) times[id] = [];
+    times[id].push(t);
+  }
+  const gaps = [];
+  for (const arr of Object.values(times)) {
+    for (let i = 1; i < arr.length; i++) {
+      gaps.push(arr[i] - arr[i - 1]);
+    }
+    // sound with no repeat: treat the full script duration as its period
+    if (arr.length === 1) gaps.push(t);
+  }
+  if (!gaps.length) return { min: 15000, max: 60000 };
+  const gMin = Math.min(...gaps);
+  const gMax = Math.max(...gaps);
+  // small ±20% buffer
+  return { min: Math.round(gMin * 0.8) * 1000, max: Math.round(gMax * 1.2) * 1000 };
+}
+
+let randomRange = null; // initialised in startSounds
+
+// each sound schedules only itself — fully independent of the others
+function scheduleSound(index) {
+  const { min, max } = randomRange;
+  const delay = min + Math.random() * (max - min);
+  setTimeout(() => {
+    playSound(index);
+    scheduleSound(index);
+  }, delay);
+}
+
+function startSounds() {
+  if (soundsStarted) return;
+  if (SOUND_FILES.length === 0) return;
+  soundsStarted = true;
+  randomRange   = computeRandomRange();
+
+  // track sounds already handed off to random mode
+  const launched = new Set();
+
+  // execute the script: cumulative delay, then scheduleSound on first appearance
+  let cumulative = 0;
+  for (const [id, delay] of SOUND_SCRIPT) {
+    cumulative += delay;
+    const idx = id - 1; // 1-based → 0-based
+    const t   = cumulative;
+    setTimeout(() => {
+      playSound(idx);
+      if (!launched.has(idx)) {
+        launched.add(idx);
+        scheduleSound(idx); // hand off to random mode after first scripted play
+      }
+    }, t * 1000);
+  }
+
+  // sounds not in the script at all — go straight to random mode
+  SOUND_FILES.forEach((_, idx) => {
+    const id = idx + 1;
+    const inScript = SOUND_SCRIPT.some(([sid]) => sid === id);
+    if (!inScript) scheduleSound(idx);
+  });
+}
+
+// ── CLOCK ──
+setInterval(() => {
+  const d = new Date();
+  const p = n => String(n).padStart(2,'0');
+  document.getElementById('clock-mini').textContent =
+    `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())} UTC`;
+}, 1000);
+
+// ── RENDER QUESTION ──
+function renderQuestion() {
+  const q = QUESTIONS[currentQ];
+  const area = document.getElementById('q-area');
+  area.innerHTML = `
+    <div class="q-number">QUESTION ${currentQ + 1} / ${QUESTIONS.length}</div>
+    <div class="q-text">${q.q}</div>
+    <div class="choice" id="ch-a" onclick="answer('a')"><span class="key">A.</span> ${q.a}</div>
+    <div class="choice" id="ch-b" onclick="answer('b')"><span class="key">B.</span> ${q.b}</div>
+    <div class="choice" id="ch-c" onclick="answer('c')"><span class="key">C.</span> ${q.c}</div>`;
+  document.getElementById('hint-row').textContent = '';
+  document.getElementById('hint-row').className = 'hint-row';
+  updateDots();
+  updateProgress();
+  locked = false;
+  area.scrollTop = 0;
+}
+
+function updateProgress() {
+  const pct = (currentQ / QUESTIONS.length) * 100;
+  document.getElementById('prog-fill').style.width = pct + '%';
+  document.getElementById('prog-label').textContent = `${currentQ} / ${QUESTIONS.length}`;
+}
+
+function updateDots() {
+  for (let i = 0; i < MAX_WRONG; i++) {
+    const dot = document.getElementById('dot-' + i);
+    dot.className = 'attempt-dot' + (i < wrongCount ? ' used' : '');
+  }
+}
+
+// ── ANSWER ──
+function answer(key) {
+  if (locked) return;
+  locked = true;
+  const q = QUESTIONS[currentQ];
+  const el = document.getElementById('ch-' + key);
+  const hint = document.getElementById('hint-row');
+
+  if (key === q.correct) {
+    el.classList.add('correct');
+    hint.textContent = '✔ Correct.';
+    hint.className = 'hint-row';
+    setTimeout(() => {
+      currentQ++;
+      if (currentQ >= QUESTIONS.length) {
+        showWin();
+      } else {
+        renderQuestion();
+      }
+    }, 700);
+  } else {
+    el.classList.add('wrong');
+    document.getElementById('ch-' + q.correct).classList.add('correct');
+    wrongCount++;
+    updateDots();
+    if (wrongCount >= MAX_WRONG) {
+      hint.textContent = '✕ Error limit reached. Restarting protocol...';
+      hint.className = 'hint-row error';
+      setTimeout(() => showFail(), 1500);
+    } else {
+      hint.textContent = `✕ Incorrect. ${MAX_WRONG - wrongCount} attempt(s) remaining.`;
+      hint.className = 'hint-row warn';
+      setTimeout(() => renderQuestion(), 1200);
+    }
+  }
+}
+
+// ── KEYBOARD ──
+document.addEventListener('keydown', e => {
+  const key = e.key.toLowerCase();
+  if (['a','b','c'].includes(key) && quizStarted) answer(key);
+});
+
+// ── SCREENS ──
+function startQuiz() {
+  document.getElementById('screen-start').classList.remove('active');
+  currentQ    = 0;
+  wrongCount  = 0;
+  quizStarted = true;
+  renderQuestion();
+  startSounds(); // fires sounds once; subsequent calls are ignored
+}
+
+function restartQuiz() {
+  document.getElementById('screen-fail').classList.remove('active');
+  currentQ    = 0;
+  wrongCount  = 0;
+  quizStarted = true;
+  renderQuestion();
+  // sounds are NOT restarted — they keep running and escalating
+}
+
+function showFail() {
+  // sounds continue even on the fail screen
+  document.getElementById('screen-fail').classList.add('active');
+}
+
+function showWin() {
+  const elapsed = Math.floor((Date.now() - soundStartTime) / 1000);
+  const m = Math.floor(elapsed / 60);
+  const s = elapsed % 60;
+  document.getElementById('win-stats').textContent =
+    `Time: ${m}m ${s}s  |  Errors: ${wrongCount}`;
+  document.getElementById('screen-win').classList.add('active');
+}
+
+// Init
+document.getElementById('screen-start').classList.add('active');
+</script>
+</body>
+</html>

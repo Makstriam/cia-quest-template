@@ -1,0 +1,1823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CIA SECURE TERMINAL — CLASSIFIED</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --green: #00ff41;
+    --green-dim: #00a82b;
+    --green-dark: #003d0f;
+    --red: #ff3c3c;
+    --amber: #ffb300;
+    --bg: #050a05;
+    --panel: #080f08;
+    --border: #1a3a1a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--green);
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    font-size: 14px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Scanlines overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.15) 2px,
+      rgba(0,0,0,0.15) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* CRT flicker */
+  @keyframes flicker {
+    0%,100% { opacity: 1; }
+    92% { opacity: 1; }
+    93% { opacity: 0.85; }
+    94% { opacity: 1; }
+    96% { opacity: 0.9; }
+    97% { opacity: 1; }
+  }
+  body { animation: flicker 8s infinite; }
+
+  /* Cursor blink */
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .cursor { display: inline-block; width: 8px; height: 14px; background: var(--green); animation: blink 1s infinite; vertical-align: middle; }
+
+  /* ── HEADER ── */
+  .header {
+    border-bottom: 2px solid var(--green-dim);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--panel);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-left { display: flex; flex-direction: column; gap: 2px; }
+  .header-logo {
+    font-size: 20px;
+    letter-spacing: 6px;
+    text-shadow: 0 0 12px var(--green);
+  }
+  .header-sub { font-size: 10px; color: var(--green-dim); letter-spacing: 3px; }
+  .header-right { text-align: right; font-size: 11px; color: var(--green-dim); line-height: 1.8; }
+  .status-online { color: var(--green); }
+  .status-red { color: var(--red); }
+
+  /* ── TICKER ── */
+  .ticker-wrap {
+    background: var(--green-dark);
+    border-bottom: 1px solid var(--green-dim);
+    overflow: hidden;
+    padding: 4px 0;
+  }
+  @keyframes ticker { 0%{transform:translateX(100%)} 100%{transform:translateX(-100%)} }
+  .ticker-text {
+    white-space: nowrap;
+    display: inline-block;
+    animation: ticker 30s linear infinite;
+    font-size: 11px;
+    color: var(--green-dim);
+    letter-spacing: 2px;
+  }
+
+  /* ── MAIN LAYOUT ── */
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 260px;
+    min-width: 260px;
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    background: var(--panel);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .sidebar-title {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--green-dim);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    margin-bottom: 4px;
+    transition: all 0.15s;
+    font-size: 13px;
+  }
+  .nav-item:hover { border-color: var(--green-dim); background: rgba(0,255,65,0.05); }
+  .nav-item.active { border-color: var(--green); background: rgba(0,255,65,0.08); color: #fff; }
+  .nav-item .icon { font-size: 16px; }
+  .nav-item .lock { margin-left: auto; font-size: 10px; color: var(--amber); }
+  .nav-item .unlocked { margin-left: auto; font-size: 10px; color: var(--green); }
+
+  .sidebar-section { margin-top: 20px; }
+
+  .access-level {
+    margin-top: 24px;
+    border: 1px solid var(--border);
+    padding: 10px;
+    font-size: 10px;
+    line-height: 1.9;
+    color: var(--green-dim);
+  }
+  .al-row { transition: all 0.4s; }
+  .al-row.active-level { color: var(--amber); font-size: 12px; }
+  .al-row.done-level { color: var(--green-dim); text-decoration: line-through; opacity: 0.5; }
+
+  /* ── CONTENT ── */
+  .content {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* ── SCREEN: DASHBOARD ── */
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  .screen-title {
+    font-size: 18px;
+    letter-spacing: 4px;
+    margin-bottom: 6px;
+    text-shadow: 0 0 10px var(--green);
+  }
+  .screen-sub {
+    font-size: 11px;
+    color: var(--green-dim);
+    letter-spacing: 2px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+  }
+
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .info-box {
+    border: 1px solid var(--border);
+    padding: 14px;
+    background: var(--panel);
+  }
+  .info-box .label { font-size: 10px; color: var(--green-dim); letter-spacing: 2px; margin-bottom: 6px; }
+  .info-box .value { font-size: 20px; color: var(--green); text-shadow: 0 0 8px var(--green); }
+  .info-box .value.red { color: var(--red); text-shadow: 0 0 8px var(--red); }
+  .info-box .value.amber { color: var(--amber); }
+
+  .log-box {
+    border: 1px solid var(--border);
+    padding: 14px;
+    background: var(--panel);
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  .log-box .log-title { font-size: 11px; letter-spacing: 3px; color: var(--green-dim); margin-bottom: 10px; }
+  .log-entry { font-size: 12px; line-height: 2; color: var(--green-dim); }
+  .log-entry .ts { color: var(--green); }
+  .log-entry .warn { color: var(--amber); }
+  .log-entry .danger { color: var(--red); }
+
+  /* ── FOLDERS GRID ── */
+  .folders-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    margin-top: 8px;
+  }
+
+  .folder-card {
+    border: 1px solid var(--border);
+    padding: 20px 16px;
+    cursor: pointer;
+    background: var(--panel);
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .folder-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--border);
+    transition: background 0.2s;
+  }
+  .folder-card:hover { border-color: var(--green-dim); background: rgba(0,255,65,0.04); }
+  .folder-card:hover::before { background: var(--green-dim); }
+  .folder-card.open { border-color: var(--green); }
+  .folder-card.open::before { background: var(--green); }
+
+  .folder-icon { font-size: 32px; margin-bottom: 10px; }
+  .folder-name { font-size: 13px; letter-spacing: 1px; margin-bottom: 4px; }
+  .folder-desc { font-size: 10px; color: var(--green-dim); line-height: 1.6; }
+  .folder-status {
+    margin-top: 12px;
+    font-size: 10px;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .folder-status.locked { color: var(--red); }
+  .folder-status.unlocked { color: var(--green); }
+  .folder-classification {
+    position: absolute;
+    top: 8px; right: 8px;
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--red);
+    border: 1px solid var(--red);
+    padding: 1px 5px;
+    opacity: 0.7;
+  }
+
+  /* ── FOLDER CONTENT VIEW ── */
+  .folder-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .back-btn {
+    border: 1px solid var(--green-dim);
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+    background: transparent;
+    color: var(--green);
+    letter-spacing: 1px;
+    transition: all 0.15s;
+  }
+  .back-btn:hover { background: rgba(0,255,65,0.1); border-color: var(--green); }
+
+  .files-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+  .file-item {
+    border: 1px solid var(--border);
+    padding: 14px 12px;
+    cursor: pointer;
+    background: var(--panel);
+    transition: all 0.15s;
+    text-align: center;
+  }
+  .file-item:hover { border-color: var(--green-dim); background: rgba(0,255,65,0.05); }
+  .file-item .file-icon { font-size: 28px; margin-bottom: 8px; }
+  .file-item .file-name { font-size: 11px; color: var(--green-dim); word-break: break-all; }
+  .file-item .file-type { font-size: 9px; color: var(--amber); margin-top: 4px; letter-spacing: 1px; }
+
+  /* ── PASSWORD MODAL ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.active { display: flex; }
+
+  .modal {
+    border: 1px solid var(--green);
+    background: var(--panel);
+    padding: 32px;
+    min-width: 380px;
+    max-width: 480px;
+    box-shadow: 0 0 40px rgba(0,255,65,0.15);
+    position: relative;
+  }
+  .modal::before {
+    content: 'SECURE ACCESS TERMINAL';
+    position: absolute;
+    top: -1px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--panel);
+    padding: 0 12px;
+    font-size: 10px;
+    color: var(--green-dim);
+    letter-spacing: 3px;
+    white-space: nowrap;
+  }
+
+  .modal-title {
+    font-size: 16px;
+    letter-spacing: 4px;
+    margin-bottom: 6px;
+    text-align: center;
+  }
+  .modal-hint {
+    font-size: 11px;
+    color: var(--green-dim);
+    text-align: center;
+    margin-bottom: 24px;
+    letter-spacing: 1px;
+    line-height: 1.6;
+  }
+  .modal-label {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--green-dim);
+    margin-bottom: 6px;
+    display: block;
+  }
+  .modal-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--green-dim);
+    color: var(--green);
+    font-family: inherit;
+    font-size: 16px;
+    padding: 10px 14px;
+    letter-spacing: 4px;
+    outline: none;
+    margin-bottom: 16px;
+    transition: border-color 0.15s;
+  }
+  .modal-input:focus { border-color: var(--green); box-shadow: 0 0 8px rgba(0,255,65,0.2); }
+  .modal-input.error { border-color: var(--red); }
+
+  .modal-error {
+    color: var(--red);
+    font-size: 11px;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+    min-height: 16px;
+    text-align: center;
+  }
+
+  .modal-btns { display: flex; gap: 10px; }
+  .btn {
+    flex: 1;
+    border: 1px solid currentColor;
+    padding: 10px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    letter-spacing: 2px;
+    background: transparent;
+    transition: all 0.15s;
+  }
+  .btn-confirm { color: var(--green); }
+  .btn-confirm:hover { background: rgba(0,255,65,0.12); }
+  .btn-cancel { color: var(--green-dim); }
+  .btn-cancel:hover { background: rgba(0,255,65,0.05); }
+
+  @keyframes shake {
+    0%,100%{transform:translateX(0)}
+    20%{transform:translateX(-8px)}
+    40%{transform:translateX(8px)}
+    60%{transform:translateX(-6px)}
+    80%{transform:translateX(6px)}
+  }
+  .shake { animation: shake 0.4s ease; }
+
+  /* ── MEDIA VIEWER ── */
+  .viewer-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.95);
+    z-index: 2000;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .viewer-overlay.active { display: flex; }
+
+  .viewer-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 2001;
+  }
+  .viewer-filename { font-size: 12px; letter-spacing: 2px; color: var(--green-dim); }
+  .viewer-close {
+    border: 1px solid var(--red);
+    color: var(--red);
+    background: transparent;
+    font-family: inherit;
+    font-size: 12px;
+    padding: 5px 14px;
+    cursor: pointer;
+    letter-spacing: 2px;
+  }
+  .viewer-close:hover { background: rgba(255,60,60,0.1); }
+
+  .viewer-content {
+    max-width: 90vw;
+    max-height: 85vh;
+    margin-top: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .viewer-content img {
+    max-width: 100%;
+    max-height: 85vh;
+    object-fit: contain;
+    border: 1px solid var(--border);
+    box-shadow: 0 0 30px rgba(0,255,65,0.1);
+  }
+  .viewer-content video {
+    max-width: 100%;
+    max-height: 85vh;
+    border: 1px solid var(--border);
+    box-shadow: 0 0 30px rgba(0,255,65,0.1);
+  }
+  .viewer-content iframe {
+    width: 80vw;
+    height: 85vh;
+    border: 1px solid var(--border);
+    box-shadow: 0 0 30px rgba(0,255,65,0.1);
+    background: #fff;
+  }
+  .viewer-textbox {
+    width: 72vw;
+    max-height: 82vh;
+    overflow-y: auto;
+    background: #020702;
+    border: 1px solid var(--green-dim);
+    padding: 28px 32px;
+    box-shadow: 0 0 30px rgba(0,255,65,0.08);
+    font-size: 13px;
+    line-height: 2;
+    color: #c8e6c8;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .viewer-textbox .txt-error { color: var(--red); font-size: 12px; }
+
+  /* ── TERMINAL SCREEN ── */
+  .terminal-box {
+    background: #020702;
+    border: 1px solid var(--border);
+    padding: 16px;
+    font-size: 12px;
+    line-height: 2;
+    max-height: 780px;
+    overflow-y: auto;
+  }
+  .t-prompt { color: var(--green-dim); }
+  .t-cmd { color: var(--green); }
+  .t-out { color: #7ab87a; }
+  .t-err { color: var(--red); }
+  .t-info { color: var(--amber); }
+  .t-sep {
+    color: var(--border);
+    letter-spacing: 2px;
+    border-top: 1px solid var(--border);
+    margin: 8px 0;
+    padding-top: 6px;
+    font-size: 10px;
+    color: var(--green-dim);
+  }
+  .t-live { color: var(--green); }
+
+  /* ── TERMINAL INPUT ── */
+  .terminal-input-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-top: 8px;
+    border: 1px solid var(--border);
+    background: #020702;
+    padding: 6px 12px;
+  }
+  .terminal-input-prompt {
+    color: var(--green-dim);
+    font-size: 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .terminal-input-field {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--green);
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    font-size: 12px;
+    caret-color: var(--green);
+    padding: 0 6px;
+  }
+  .terminal-input-field::placeholder { color: var(--green-dark); }
+
+  /* ── PINNED MESSAGES (Dashboard) ── */
+  .pinned-feed { display: flex; flex-direction: column; gap: 14px; margin-top: 20px; }
+  .pinned-msg {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    overflow: hidden;
+  }
+  .pinned-msg-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(0,255,65,0.03);
+    gap: 12px;
+  }
+  .pinned-msg-from { font-size: 12px; color: var(--green); letter-spacing: 1px; }
+  .pinned-msg-rank { font-size: 10px; color: var(--green-dim); margin-top: 2px; }
+  .pinned-msg-meta { text-align: right; flex-shrink: 0; }
+  .pinned-msg-date { font-size: 10px; color: var(--green-dim); }
+  .pinned-msg-tag {
+    display: inline-block;
+    font-size: 9px;
+    letter-spacing: 1px;
+    padding: 1px 6px;
+    margin-top: 4px;
+    border: 1px solid;
+  }
+  .pinned-msg-tag.amber { color: var(--amber); border-color: var(--amber); }
+  .pinned-msg-tag.green { color: var(--green); border-color: var(--green-dim); }
+  .pinned-msg-tag.red   { color: var(--red);   border-color: var(--red); }
+  .pinned-msg-body {
+    padding: 12px 14px;
+    font-size: 12px;
+    line-height: 1.9;
+    color: #7ab87a;
+    white-space: pre-wrap;
+  }
+
+  /* ── SIDEBAR NOTES ── */
+  .notes-block {
+    margin-top: 20px;
+    border: 1px solid var(--border);
+    padding: 10px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .notes-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--green-dim);
+    margin-bottom: 8px;
+  }
+  .notes-textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--green);
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    font-size: 11px;
+    line-height: 1.7;
+    padding: 8px;
+    resize: none;
+    outline: none;
+    flex: 1;
+    transition: border-color 0.15s;
+  }
+  .notes-textarea:focus { border-color: var(--green-dim); }
+  .notes-textarea::placeholder { color: var(--green-dark); }
+  .notes-saved {
+    font-size: 9px;
+    color: var(--green-dim);
+    letter-spacing: 1px;
+    margin-top: 5px;
+    min-height: 13px;
+    text-align: right;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .notes-saved.visible { opacity: 1; }
+
+  /* ── PROGRESS BAR ── */
+  .progress-block {
+    margin-top: 14px;
+    padding: 0 2px;
+  }
+  .progress-track {
+    width: 100%;
+    height: 4px;
+    background: var(--green-dark);
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--green);
+    width: 0%;
+    transition: width 0.6s ease;
+    box-shadow: 0 0 6px var(--green);
+  }
+  .progress-dots {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 5px;
+    padding: 0 1px;
+  }
+  .progress-dot {
+    width: 5px; height: 5px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    transition: all 0.4s;
+  }
+  .progress-dot.filled {
+    background: var(--green);
+    border-color: var(--green);
+    box-shadow: 0 0 5px var(--green);
+  }
+
+  /* ── SYSTEM MESSAGES ── */
+  .sys-msg-block {
+    margin-top: 14px;
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    height: 52px;
+    background: #020702;
+    position: relative;
+    overflow: hidden;
+  }
+  .sys-msg-label {
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--green-dark);
+    margin-bottom: 5px;
+  }
+  .sys-msg-line {
+    font-size: 10px;
+    color: var(--green-dim);
+    letter-spacing: 0.5px;
+    line-height: 1.7;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+  }
+  .sys-msg-dot {
+    display: inline-block;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--green);
+    animation: blink 1.2s infinite;
+  }
+  .sys-msg-text-wrap {
+    overflow: hidden;
+    white-space: nowrap;
+    flex: 1;
+  }
+  .sys-msg-line.warn .sys-msg-dot { background: var(--amber); }
+  .sys-msg-line.warn { color: var(--amber); }
+  .sys-msg-line.err  .sys-msg-dot { background: var(--red); }
+  .sys-msg-line.err  { color: var(--red); }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--green-dark); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--green-dim); }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════ HEADER ═══════════════════════════ -->
+<div class="header">
+  <div class="header-left">
+    <div class="header-logo">▓ CIA SECURE TERMINAL</div>
+    <div class="header-sub">CLASSIFIED DOCUMENT MANAGEMENT SYSTEM v4.7.2</div>
+  </div>
+  <div class="header-right">
+    <div>OPERATOR: <span class="status-online">FIELD AGENT #7714</span></div>
+    <div>STATUS: <span class="status-red">⬤</span> CLEARANCE REQUIRED</div>
+    <div id="clock">DATE/TIME: ██/██/████ ██:██:██ UTC</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ TICKER ═══════════════════════════ -->
+<div class="ticker-wrap">
+  <span class="ticker-text">
+    ⚠ CLASSIFICATION: TOP SECRET ⚠ &nbsp;&nbsp;&nbsp;
+    UNAUTHORISED ACCESS IS A FEDERAL CRIME — 18 U.S.C. § 1030 &nbsp;&nbsp;&nbsp;
+    ALL SESSIONS ARE MONITORED AND LOGGED &nbsp;&nbsp;&nbsp;
+    OPERATION CODENAME: [REDACTED] &nbsp;&nbsp;&nbsp;
+    ENCRYPT ALL OUTGOING TRANSMISSIONS &nbsp;&nbsp;&nbsp;
+    ⚠ CLASSIFICATION: TOP SECRET ⚠ &nbsp;&nbsp;&nbsp;
+    CASE FILES UPDATED: 06/07/2026 &nbsp;&nbsp;&nbsp;
+    NEXT BRIEFING: PENDING FIELD REPORT &nbsp;&nbsp;&nbsp;
+  </span>
+</div>
+
+<!-- ═══════════════════════════ MAIN ═══════════════════════════ -->
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-title">▶ NAVIGATION</div>
+
+    <div class="nav-item active" onclick="showScreen('dashboard')">
+      <span class="icon">⬛</span> DASHBOARD
+    </div>
+    <div class="nav-item" onclick="showScreen('folders')">
+      <span class="icon">📁</span> CASE FILES
+    </div>
+    <div class="nav-item" onclick="showScreen('terminal')">
+      <span class="icon">▒</span> TERMINAL LOG
+    </div>
+
+    <div class="access-level">
+      <div class="label" style="font-size:10px;letter-spacing:2px;color:var(--green-dim);margin-bottom:8px;">ACCESS LEVEL</div>
+      <div id="al-1" class="al-row active-level">■ LEVEL 1 — PUBLIC</div>
+      <div id="al-2" class="al-row" style="margin-top:4px">□ LEVEL 2 — RESTRICTED</div>
+      <div id="al-3" class="al-row">□ LEVEL 3 — SECRET</div>
+      <div id="al-4" class="al-row">□ LEVEL 4 — TOP SECRET</div>
+    </div>
+
+    <div class="notes-block">
+      <div class="notes-label">▶ AGENT NOTES</div>
+      <textarea class="notes-textarea" id="agent-notes"
+        placeholder="notes, clues, codes..."></textarea>
+      <div class="notes-saved" id="notes-saved">✔ saved</div>
+    </div>
+
+    <div class="sys-msg-block">
+      <div class="sys-msg-label">SYS // LIVE FEED</div>
+      <div class="sys-msg-line" id="sys-msg-line">
+        <span class="sys-msg-dot"></span>
+        <div class="sys-msg-text-wrap"><span id="sys-msg-text">Initialising monitor...</span></div>
+      </div>
+    </div>
+
+    <div class="progress-block">
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div class="progress-dots" id="progress-dots"></div>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- ── DASHBOARD ── -->
+    <div class="screen active" id="screen-dashboard">
+      <div class="screen-title">DASHBOARD</div>
+      <div class="screen-sub">SYSTEM STATUS / OPERATOR OVERVIEW</div>
+
+      <div class="info-grid">
+        <div class="info-box">
+          <div class="label">CASE FILES</div>
+          <div class="value" id="total-folders">4</div>
+        </div>
+        <div class="info-box">
+          <div class="label">LOCKED</div>
+          <div class="value red" id="locked-count">4</div>
+        </div>
+        <div class="info-box">
+          <div class="label">UNLOCKED</div>
+          <div class="value amber" id="unlocked-count">0</div>
+        </div>
+      </div>
+
+      <div class="log-box">
+        <div class="log-title">SYSTEM ACCESS LOG</div>
+        <div id="access-log">
+          <div class="log-entry"><span class="ts">[BOOT]</span> Secure terminal initialised.</div>
+          <div class="log-entry"><span class="ts">[INFO]</span> Encryption layer <span class="warn">AES-256</span> active.</div>
+          <div class="log-entry"><span class="ts">[WARN]</span> <span class="warn">4 classified folders</span> require authentication.</div>
+          <div class="log-entry"><span class="ts">[INFO]</span> Session monitoring enabled. All actions recorded.</div>
+          <div class="log-entry"><span class="ts">[IDLE]</span> Awaiting operator input... <span class="cursor"></span></div>
+        </div>
+      </div>
+
+      <div style="font-size:11px;letter-spacing:3px;color:var(--green-dim);margin-bottom:4px;">▶ PINNED MESSAGES</div>
+      <div class="pinned-feed" id="pinned-feed"></div>
+    </div>
+
+    <!-- ── CASE FILES (FOLDERS LIST) ── -->
+    <div class="screen" id="screen-folders">
+      <div class="screen-title">CASE FILES</div>
+      <div class="screen-sub">SELECT FOLDER — AUTHENTICATION REQUIRED</div>
+      <div class="folders-grid" id="folders-grid"></div>
+    </div>
+
+    <!-- ── FOLDER CONTENT ── -->
+    <div class="screen" id="screen-folder-content">
+      <div class="folder-header">
+        <button class="back-btn" onclick="showScreen('folders')">◀ BACK</button>
+        <div>
+          <div class="screen-title" id="open-folder-title">FOLDER</div>
+          <div style="font-size:11px;color:var(--green-dim);letter-spacing:2px;" id="open-folder-sub"></div>
+        </div>
+      </div>
+      <div class="files-grid" id="files-grid"></div>
+    </div>
+
+    <!-- ── TERMINAL ── -->
+    <div class="screen" id="screen-terminal">
+      <div class="screen-title">TERMINAL LOG</div>
+      <div class="screen-sub">SYSTEM EVENT HISTORY + LIVE SESSION</div>
+      <div class="terminal-box" id="terminal-log">
+        <div id="t-history"></div>
+        <div class="t-sep">── LIVE SESSION ─────────────────────────────────────</div>
+        <div id="t-live">
+          <div><span class="t-prompt">sys@cia-secure:~$ </span><span class="t-cmd">await_operator... <span class="cursor"></span></span></div>
+        </div>
+      </div>
+
+      <div class="terminal-input-row">
+        <span class="terminal-input-prompt">operator@cia-secure:~$ </span>
+        <input class="terminal-input-field" id="terminal-input"
+               type="text" placeholder="type command..."
+               autocomplete="off" spellcheck="false"
+               onkeydown="if(event.key==='Enter')handleTerminalInput()">
+      </div>
+
+      <div style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <div style="display:flex;gap:18px;font-size:10px;letter-spacing:1px;">
+          <span style="color:#7ab87a;">■ OUT</span>
+          <span style="color:var(--amber);">■ INFO</span>
+          <span style="color:var(--red);">■ ERR</span>
+          <span style="color:var(--green);">■ LIVE</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;">
+          <span style="font-size:10px;color:var(--green-dim);letter-spacing:1px;">
+            EVENTS THIS SESSION: <span id="session-counter" style="color:var(--green);">0</span>
+          </span>
+          <button onclick="clearLive()" style="
+            border:1px solid var(--green-dim);
+            color:var(--green-dim);
+            background:transparent;
+            font-family:inherit;
+            font-size:10px;
+            letter-spacing:2px;
+            padding:4px 12px;
+            cursor:pointer;
+            transition:all 0.15s;
+          " onmouseover="this.style.borderColor='var(--green)';this.style.color='var(--green)'"
+             onmouseout="this.style.borderColor='var(--green-dim)';this.style.color='var(--green-dim)'">
+            ✕ CLEAR LIVE
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════ PASSWORD MODAL ═══════════════════════════ -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal-box">
+    <div class="modal-title" id="modal-folder-name">FOLDER</div>
+    <div class="modal-hint" id="modal-hint">Enter access code to decrypt this folder</div>
+    <label class="modal-label">ACCESS CODE:</label>
+    <input class="modal-input" id="modal-input" type="password" maxlength="32"
+           placeholder="••••••••" autocomplete="off"
+           onkeydown="if(event.key==='Enter')confirmPassword()">
+    <div class="modal-error" id="modal-error"></div>
+    <div class="modal-btns">
+      <button class="btn btn-confirm" onclick="confirmPassword()">▶ CONFIRM</button>
+      <button class="btn btn-cancel" onclick="closeModal()">✕ CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ MEDIA VIEWER ═══════════════════════════ -->
+<div class="viewer-overlay" id="viewer-overlay">
+  <div class="viewer-bar">
+    <div class="viewer-filename" id="viewer-filename">FILE.JPG</div>
+    <button class="viewer-close" onclick="closeViewer()">✕ CLOSE</button>
+  </div>
+  <div class="viewer-content" id="viewer-content"></div>
+</div>
+
+<!-- ═══════════════════════════ SCRIPT ═══════════════════════════ -->
+<script>
+// ══════════════════════════════════════════════════════════════════
+//  PINNED MESSAGES — shown on Dashboard
+//
+//  from      — sender name
+//  rank      — rank / clearance level
+//  date      — date and time (any string)
+//  tag       — label on the badge (MISSION BRIEFING / FIELD NOTE / etc.)
+//  tagColor  — badge colour: "amber" | "green" | "red"
+//  text      — message body (multiline with \n)
+// ══════════════════════════════════════════════════════════════════
+const PINNED_MESSAGES = [
+  // ── Example 1: amber tag — MISSION BRIEFING (main intro message)
+  {
+    from:     "DIRECTOR HARRIS",
+    rank:     "LEVEL 4 CLEARANCE — OPERATIONS DIVISION",
+    date:     "06/07/2026  09:14 UTC",
+    tag:      "MISSION BRIEFING",
+    tagColor: "amber",
+    text:
+`Agent, your mission has been loaded to this terminal.
+Review all case files. Access codes have been distributed through secure channels.
+Proceed with caution — the subject is aware of surveillance.
+
+// REPLACE THIS TEXT WITH YOUR OWN QUEST INTRO //`
+  },
+  // ── Example 2: green tag — FIELD NOTE
+  {
+    from:     "AGENT RILEY  //  FIELD UNIT 3",
+    rank:     "LEVEL 2 CLEARANCE",
+    date:     "06/07/2026  11:30 UTC",
+    tag:      "FIELD NOTE",
+    tagColor: "green",
+    text:
+`Surveillance active since 04:00. Subject has not left the building.
+Likely awaiting a handoff. Standing by for handler confirmation.
+
+// REPLACE OR REMOVE THIS BLOCK //`
+  },
+  // ── Example 3: red tag — ALERT / WARNING
+  {
+    from:     "ANALYST K. VORONOV  //  TECH DIVISION",
+    rank:     "LEVEL 3 CLEARANCE",
+    date:     "06/07/2026  13:55 UTC",
+    tag:      "ALERT",
+    tagColor: "red",
+    text:
+`⚠ External access attempt detected on folder #3.
+IP has been blocked. Recommend rotating access codes after operation concludes.
+
+// REPLACE OR REMOVE THIS BLOCK //`
+  },
+];
+// ══════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════
+//  TERMINAL HISTORY — backstory, edit freely
+//
+//  Line types:
+//    { t: "cmd",  text: "command" }   — green prompt + command
+//    { t: "out",  text: "output"  }   — light green output
+//    { t: "info", text: "warning" }   — yellow
+//    { t: "err",  text: "error"   }   — red
+//    { t: "sep" }                     — divider line
+//
+//  Template for a realistic session line:
+//    { t: "out", text: "[05/07/2026 22:31:08]  AGENT_VEGA9 @ 91.108.4.212  →  SESSION STARTED" }
+//    { t: "err", text: "[05/07/2026 23:14:07]  UNKNOWN     @ 45.33.32.156  →  ACCESS DENIED (FOLDER_03)" }
+// ══════════════════════════════════════════════════════════════════
+const TERMINAL_HISTORY = [
+  { t: "cmd",  text: "init_session --secure --date 2026-07-05 --agent VEGA_9" },
+  { t: "out",  text: "Authenticating... OK" },
+  { t: "out",  text: "Loading encrypted volumes... OK" },
+  { t: "out",  text: "Integrity check passed. 2 classified objects mounted." },
+  { t: "sep" },
+  { t: "cmd",  text: "session_log --last 24h" },
+  { t: "out",  text: "[05/07/2026  19:02:44]  AGENT_RILEY  @ 176.52.11.87   →  SESSION STARTED" },
+  { t: "out",  text: "[05/07/2026  19:04:11]  AGENT_RILEY  @ 176.52.11.87   →  UNLOCKED FOLDER_01" },
+  { t: "out",  text: "[05/07/2026  19:04:38]  AGENT_RILEY  @ 176.52.11.87   →  VIEWED  suspect_front.jpg" },
+  { t: "out",  text: "[05/07/2026  19:06:02]  AGENT_RILEY  @ 176.52.11.87   →  VIEWED  suspect_side.jpg" },
+  { t: "out",  text: "[05/07/2026  19:08:55]  AGENT_RILEY  @ 176.52.11.87   →  SESSION CLOSED" },
+  { t: "sep" },
+  { t: "out",  text: "[05/07/2026  22:31:08]  ANALYST_KV   @ 10.0.0.44      →  SESSION STARTED" },
+  { t: "out",  text: "[05/07/2026  22:31:44]  ANALYST_KV   @ 10.0.0.44      →  UNLOCKED FOLDER_02" },
+  { t: "out",  text: "[05/07/2026  22:32:19]  ANALYST_KV   @ 10.0.0.44      →  VIEWED  evidence_01.jpg" },
+  { t: "info", text: "[05/07/2026  23:14:07]  UNKNOWN      @ 45.33.32.156   →  ACCESS DENIED (FOLDER_02) — 3 ATTEMPTS" },
+  { t: "err",  text: "[05/07/2026  23:14:09]  FIREWALL     RULE UPDATED — IP 45.33.32.156 BLOCKED" },
+  { t: "out",  text: "[05/07/2026  23:15:01]  ANALYST_KV   @ 10.0.0.44      →  SESSION CLOSED" },
+  { t: "sep" },
+  { t: "cmd",  text: "status" },
+  { t: "info", text: "WARN: 1 external intrusion attempt since last session." },
+  { t: "out",  text: "All volumes intact. Awaiting authorised operator." },
+];
+// ══════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════
+//  FOLDERS CONFIG — add, remove or edit folders here
+//
+//  id             — unique ID (latin letters, no spaces)
+//  name           — folder name shown on screen
+//  desc           — short description
+//  classification — corner badge (TOP SECRET / CLASSIFIED / etc.)
+//  password       — password to unlock the folder
+//  hint           — hint shown in the password prompt
+//  files          — list of files inside (fill in your file paths)
+//
+//  File formats:
+//    { name: "photo.jpg",  path: "media/photo.jpg",  type: "image" }
+//    { name: "video.mp4",  path: "media/video.mp4",  type: "video" }
+//    { name: "sound.mp3",  path: "media/sound.mp3",  type: "audio" }
+//    { name: "doc.pdf",    path: "media/doc.pdf",    type: "pdf"   }
+//    { name: "report.txt", path: "media/report.txt", type: "text"  }  ← web server only
+//    { name: "Note",       content: "Inline text here.", type: "note" }
+// ══════════════════════════════════════════════════════════════════
+const FOLDERS = [
+  {
+    id: "folder_01",
+    name: "CASE FILE #01 — SUSPECT",
+    desc: "Personnel files. Photographs, recordings and identification documents.",
+    classification: "SECRET",
+    password: "hunter2",          // ← CHANGE PASSWORD
+    hint: "The password is the agent's codename from the first letter.",
+    files: [
+      { name: "function.jpg",        path: "media/function.jpg",        type: "image" },
+      { name: "city.mp4",            path: "media/city.mp4",            type: "video" },
+      { name: "wind.mp3",            path: "media/wind.mp3",            type: "audio" },
+      { name: "personnel_file.pdf",  path: "media/personnel_file.pdf",  type: "pdf"   },
+      { name: "field_report.txt", type: "note", content:
+`CLASSIFIED FIELD REPORT — OPERATION NIGHTFALL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DATE:     05/07/2026
+AGENT:    RILEY // FIELD UNIT 3
+LOCATION: [REDACTED], SECTOR 7
+STATUS:   ACTIVE SURVEILLANCE
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Subject arrived at the location at 19:42 local time.
+Contact with unknown individual — approx. 40 years old,
+grey coat, no visible identification.
+
+Exchange lasted no more than 3 minutes.
+A small package was transferred. Contents unknown.
+
+Subject then proceeded north on foot toward the
+transit hub. Surveillance maintained until 21:15.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OBSERVATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [!] Subject appears aware of surveillance.
+      Recommend switching to passive monitoring.
+
+  [!] Unknown contact matches description from
+      CASE FILE #02. Cross-reference required.
+
+  [ ] Package contents — analysis pending.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NEXT ACTION: await Director authorisation.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+      },
+    ]
+  },
+  {
+    id: "folder_02",
+    name: "CASE FILE #02 — EVIDENCE",
+    desc: "Field evidence. Add your files to the files[] array below.",
+    classification: "TOP SECRET",
+    password: "shadow9",           // ← CHANGE PASSWORD
+    hint: "The password is written in red on the last page of the dossier.",
+    files: [
+      // empty folder — add your files here:
+      // { name: "photo.jpg",  path: "media/photo.jpg",  type: "image" },
+      // { name: "audio.mp3",  path: "media/audio.mp3",  type: "audio" },
+    ]
+  },
+];
+// ══════════════════════════════════════════════════════════════════
+
+// STATE
+const unlockedFolders = new Set();
+let pendingFolderId = null;
+
+// ── AUDIO (Web Audio API) ──
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+function getAudio() {
+  if (!audioCtx) audioCtx = new AudioCtx();
+  return audioCtx;
+}
+function playBeep(freq, dur, vol, type) {
+  try {
+    const ctx = getAudio();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = type || 'square';
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    gain.gain.setValueAtTime(vol || 0.08, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+    osc.start(); osc.stop(ctx.currentTime + dur);
+  } catch(e) {}
+}
+function soundType()    { playBeep(880, 0.04, 0.05, 'square'); }
+function soundSuccess() {
+  playBeep(440, 0.1, 0.1, 'sine');
+  setTimeout(() => playBeep(660, 0.15, 0.1, 'sine'), 100);
+  setTimeout(() => playBeep(880, 0.25, 0.1, 'sine'), 220);
+}
+function soundError() {
+  playBeep(220, 0.12, 0.12, 'sawtooth');
+  setTimeout(() => playBeep(180, 0.2, 0.1, 'sawtooth'), 130);
+}
+function soundClick()   { playBeep(600, 0.05, 0.06, 'sine'); }
+function soundOpen()    { playBeep(520, 0.08, 0.08, 'sine'); setTimeout(() => playBeep(700, 0.12, 0.07, 'sine'), 90); }
+
+// ── CLOCK ──
+function updateClock() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  document.getElementById('clock').textContent =
+    `DATE/TIME: ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} UTC`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── NAV ──
+function showScreen(id) {
+  soundClick();
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+  const navMap = { dashboard: 0, folders: 1, terminal: 2 };
+  if (navMap[id] !== undefined) {
+    document.querySelectorAll('.nav-item')[navMap[id]].classList.add('active');
+  }
+  if (id === 'folders') renderFolders();
+}
+
+// ── RENDER FOLDERS ──
+function renderFolders() {
+  const grid = document.getElementById('folders-grid');
+  grid.innerHTML = '';
+  FOLDERS.forEach(f => {
+    const isOpen = unlockedFolders.has(f.id);
+    const card = document.createElement('div');
+    card.className = 'folder-card' + (isOpen ? ' open' : '');
+    card.innerHTML = `
+      <div class="folder-classification">${f.classification}</div>
+      <div class="folder-icon">${isOpen ? '📂' : '📁'}</div>
+      <div class="folder-name">${f.name}</div>
+      <div class="folder-desc">${f.desc}</div>
+      <div class="folder-status ${isOpen ? 'unlocked' : 'locked'}">
+        ${isOpen ? '✔ UNLOCKED' : '🔒 LOCKED — AUTHENTICATION REQUIRED'}
+      </div>`;
+    card.onclick = () => isOpen ? openFolder(f.id) : promptPassword(f.id);
+    grid.appendChild(card);
+  });
+  updateStats();
+}
+
+// ── STATS ──
+function updateStats() {
+  const opened = unlockedFolders.size;
+  document.getElementById('total-folders').textContent = FOLDERS.length;
+  document.getElementById('locked-count').textContent = FOLDERS.length - opened;
+  document.getElementById('unlocked-count').textContent = opened;
+
+  // ACCESS LEVEL: 0 unlocked = level 1, 1 = level 2, 2–3 = level 3, all = level 4
+  const level = opened === 0 ? 1
+              : opened === 1 ? 2
+              : opened < FOLDERS.length ? 3
+              : 4;
+
+  const labels = [
+    null,
+    '■ LEVEL 1 — PUBLIC',
+    '■ LEVEL 2 — RESTRICTED',
+    '■ LEVEL 3 — SECRET',
+    '■ LEVEL 4 — TOP SECRET'
+  ];
+
+  for (let i = 1; i <= 4; i++) {
+    const el = document.getElementById('al-' + i);
+    el.classList.remove('active-level', 'done-level');
+    if (i < level) {
+      el.textContent = '✔ LEVEL ' + i + ' — ' + ['','PUBLIC','RESTRICTED','SECRET','TOP SECRET'][i];
+      el.classList.add('done-level');
+    } else if (i === level) {
+      el.textContent = labels[i];
+      el.classList.add('active-level');
+    } else {
+      el.textContent = '□ LEVEL ' + i + ' — ' + ['','PUBLIC','RESTRICTED','SECRET','TOP SECRET'][i];
+    }
+  }
+}
+
+// ── PASSWORD PROMPT ──
+function promptPassword(folderId) {
+  const f = FOLDERS.find(x => x.id === folderId);
+  pendingFolderId = folderId;
+  document.getElementById('modal-folder-name').textContent = f.name;
+  document.getElementById('modal-hint').textContent = f.hint;
+  document.getElementById('modal-input').value = '';
+  document.getElementById('modal-error').textContent = '';
+  document.getElementById('modal-input').classList.remove('error');
+  document.getElementById('modal-overlay').classList.add('active');
+  setTimeout(() => document.getElementById('modal-input').focus(), 50);
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('active');
+  pendingFolderId = null;
+}
+
+function confirmPassword() {
+  const input = document.getElementById('modal-input');
+  const val = input.value;
+  const f = FOLDERS.find(x => x.id === pendingFolderId);
+  if (val === f.password) {
+    soundSuccess();
+    unlockedFolders.add(f.id);
+    closeModal();
+    addTerminalEvent('live', `UNLOCKED  ${f.id.toUpperCase()}`);
+    openFolder(f.id);
+    updateStats();
+    updateProgress();
+  } else {
+    soundError();
+    input.classList.add('error');
+    document.getElementById('modal-error').textContent = '✕ ACCESS DENIED — INVALID CODE';
+    document.getElementById('modal-box').classList.add('shake');
+    addLog(`[DENIED] Invalid code — "${f.name}".`, 'danger');
+    addTerminalEvent('err', `ACCESS DENIED  ${pendingFolderId.toUpperCase()}`);
+    setTimeout(() => document.getElementById('modal-box').classList.remove('shake'), 500);
+    setTimeout(() => { input.classList.remove('error'); document.getElementById('modal-error').textContent=''; }, 1800);
+    input.value = '';
+    input.focus();
+  }
+}
+
+// ── OPEN FOLDER ──
+function openFolder(folderId) {
+  const f = FOLDERS.find(x => x.id === folderId);
+  document.getElementById('open-folder-title').textContent = f.name;
+  document.getElementById('open-folder-sub').textContent = `${f.files.length} FILE(S) — ${f.classification}`;
+
+  const grid = document.getElementById('files-grid');
+  grid.innerHTML = '';
+
+  if (f.files.length === 0) {
+    grid.innerHTML = `
+      <div style="grid-column:1/-1;color:var(--green-dim);font-size:13px;padding:20px;border:1px solid var(--border);">
+        ⚠ NO FILES IN THIS FOLDER YET.<br><br>
+        <span style="font-size:11px;color:#7ab87a;">
+          Add files to the files[] array in the FOLDERS_config (in the script).<br>
+          Place files in the <b>media/</b> folder next to index.html.<br>
+          Format: <b>{ name: "photo.jpg", path: "media/photo.jpg", type: "image" }</b>
+        </span>
+      </div>`;
+  } else {
+    f.files.forEach(file => {
+      const item = document.createElement('div');
+      item.className = 'file-item';
+      const iconMap = { image: '🖼', video: '🎬', audio: '🔊', pdf: '📋', text: '📄', note: '📝' };
+      const icon = iconMap[file.type] || '📄';
+      item.innerHTML = `
+        <div class="file-icon">${icon}</div>
+        <div class="file-name">${file.name}</div>
+        <div class="file-type">${file.type.toUpperCase()}</div>`;
+      item.onclick = () => openFile(file);
+      grid.appendChild(item);
+    });
+  }
+
+  showScreen('folder-content');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+}
+
+// ── OPEN FILE ──
+function openFile(file) {
+  soundOpen();
+  addTerminalEvent('live', `VIEWED    ${file.name}`);
+  document.getElementById('viewer-filename').textContent = file.name.toUpperCase();
+  const content = document.getElementById('viewer-content');
+
+  if (file.type === 'image') {
+    content.innerHTML = `<img src="${file.path}" alt="${file.name}" onerror="this.alt='[IMAGE NOT FOUND — check path]'">`;
+
+  } else if (file.type === 'video') {
+    content.innerHTML = `<video controls autoplay><source src="${file.path}"><p style="color:var(--red)">[VIDEO NOT FOUND — check path]</p></video>`;
+
+  } else if (file.type === 'pdf') {
+    content.innerHTML = `<iframe src="${file.path}" title="${file.name}">
+      <p style="color:var(--red);padding:20px">[PDF NOT SUPPORTED IN THIS BROWSER — <a href="${file.path}" target="_blank" style="color:var(--green)">open in new tab</a>]</p>
+    </iframe>`;
+
+  } else if (file.type === 'text') {
+    // fetch .txt file and display its content (requires a web server, not file://)
+    const box = document.createElement('div');
+    box.className = 'viewer-textbox';
+    box.textContent = 'Loading...';
+    content.innerHTML = '';
+    content.appendChild(box);
+    fetch(file.path)
+      .then(r => { if (!r.ok) throw new Error('not found'); return r.text(); })
+      .then(t => { box.textContent = t; })
+      .catch(() => { box.innerHTML = `<span class="txt-error">[FILE NOT FOUND — check path: ${file.path}]</span>`; });
+
+  } else if (file.type === 'audio') {
+    content.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:20px;">
+        <div style="font-size:48px;">🔊</div>
+        <div style="font-size:12px;color:var(--green-dim);letter-spacing:2px;">${file.name.toUpperCase()}</div>
+        <audio controls autoplay style="width:340px;outline:none;">
+          <source src="${file.path}">
+          <p style="color:var(--red)">[AUDIO NOT SUPPORTED — check browser settings]</p>
+        </audio>
+      </div>`;
+
+  } else if (file.type === 'note') {
+    // text stored inline in config via the content field
+    const box = document.createElement('div');
+    box.className = 'viewer-textbox';
+    box.textContent = file.content || '[no content]';
+    content.innerHTML = '';
+    content.appendChild(box);
+  }
+
+  document.getElementById('viewer-overlay').classList.add('active');
+}
+
+function closeViewer() {
+  document.getElementById('viewer-overlay').classList.remove('active');
+  // stop video
+  const vid = document.querySelector('#viewer-content video');
+  if (vid) { vid.pause(); vid.src = ''; }
+}
+
+// ── LOG ──
+function addLog(msg, cls) {
+  const log = document.getElementById('access-log');
+  const ts = new Date().toLocaleTimeString('en-GB');
+  const div = document.createElement('div');
+  div.className = 'log-entry';
+  div.innerHTML = `<span class="ts">[${ts}]</span> <span class="${cls||''}">${msg}</span>`;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ── CLOSE MODAL ON OVERLAY CLICK ──
+document.getElementById('modal-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+document.getElementById('viewer-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeViewer();
+});
+
+// ── ESCAPE KEY ──
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') { closeModal(); closeViewer(); }
+});
+
+// ── SOUND ON PASSWORD INPUT ──
+document.getElementById('modal-input').addEventListener('input', function() {
+  soundType();
+});
+
+// ── AGENT NOTES (localStorage) ──
+const notesEl = document.getElementById('agent-notes');
+const notesSaved = document.getElementById('notes-saved');
+notesEl.value = localStorage.getItem('agent_notes') || '';
+let notesSaveTimer = null;
+notesEl.addEventListener('input', function() {
+  clearTimeout(notesSaveTimer);
+  notesSaveTimer = setTimeout(() => {
+    localStorage.setItem('agent_notes', notesEl.value);
+    notesSaved.classList.add('visible');
+    setTimeout(() => notesSaved.classList.remove('visible'), 1500);
+  }, 600);
+});
+
+// ── RENDER PINNED MESSAGES ──
+function renderPinned() {
+  const feed = document.getElementById('pinned-feed');
+  feed.innerHTML = '';
+  PINNED_MESSAGES.forEach(m => {
+    const div = document.createElement('div');
+    div.className = 'pinned-msg';
+    div.innerHTML = `
+      <div class="pinned-msg-head">
+        <div>
+          <div class="pinned-msg-from">FROM: ${m.from}</div>
+          <div class="pinned-msg-rank">${m.rank}</div>
+        </div>
+        <div class="pinned-msg-meta">
+          <div class="pinned-msg-date">${m.date}</div>
+          <span class="pinned-msg-tag ${m.tagColor}">${m.tag}</span>
+        </div>
+      </div>
+      <div class="pinned-msg-body">${m.text}</div>`;
+    feed.appendChild(div);
+  });
+}
+
+// ── RENDER TERMINAL HISTORY ──
+function renderTerminalHistory() {
+  const hist = document.getElementById('t-history');
+  hist.innerHTML = '';
+  TERMINAL_HISTORY.forEach(line => {
+    const div = document.createElement('div');
+    if (line.t === 'sep') {
+      div.className = 't-sep';
+      div.textContent = '── ────────────────────────────────────────────────────';
+    } else if (line.t === 'cmd') {
+      div.innerHTML = `<span class="t-prompt">sys@cia-secure:~$ </span><span class="t-cmd">${line.text}</span>`;
+    } else {
+      div.className = 't-' + line.t;
+      div.textContent = line.text;
+    }
+    hist.appendChild(div);
+  });
+}
+
+// ── APPEND LIVE TERMINAL EVENT ──
+function addTerminalEvent(type, text) {
+  bumpCounter();
+  const live = document.getElementById('t-live');
+  const tbox = document.getElementById('terminal-log');
+  // remove cursor line if it is the last child
+  const last = live.lastElementChild;
+  if (last && last.querySelector('.cursor')) last.remove();
+
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const ts = `[${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}  ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}]`;
+
+  const div = document.createElement('div');
+  div.className = 't-' + type;
+  div.textContent = `${ts}  AGENT_7714  @ 127.0.0.1   →  ${text}`;
+  live.appendChild(div);
+
+  // re-append cursor line
+  const cur = document.createElement('div');
+  cur.innerHTML = `<span class="t-prompt">sys@cia-secure:~$ </span><span class="t-cmd">await_operator... <span class="cursor"></span></span>`;
+  live.appendChild(cur);
+
+  tbox.scrollTop = tbox.scrollHeight;
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  SYSTEM MESSAGES — live feed in the sidebar
+//  cls: ""  = green  |  "warn" = yellow  |  "err" = red
+//
+//  The block below contains built-in atmospheric messages.
+//  ── YOUR_MESSAGES ── are at the bottom of the array.
+//  You can: leave everything as-is, add your own, replace, or remove any line.
+// ══════════════════════════════════════════════════════════════════
+const ALL_SYS_MESSAGES = [
+  { text: "Scanning network interfaces...",       cls: ""     },
+  { text: "Heartbeat OK — 127.0.0.1",             cls: ""     },
+  { text: "Encryption handshake verified.",        cls: ""     },
+  { text: "Packet received — 10.0.0.1:4433",      cls: ""     },
+  { text: "Memory integrity check passed.",        cls: ""     },
+  { text: "Idle timeout in 14:32...",              cls: ""     },
+  { text: "AES-256 key rotation scheduled.",       cls: ""     },
+  { text: "Sync with secure server... OK",         cls: ""     },
+  { text: "Checking file signatures...",           cls: ""     },
+  { text: "Monitoring external endpoints...",      cls: ""     },
+  { text: "Firewall rules active. All ports OK.",  cls: ""     },
+  { text: "WARN: unusual packet — 45.33.32.156",  cls: "warn" },
+  { text: "WARN: high CPU on /vault process",      cls: "warn" },
+  { text: "WARN: session token expires soon.",     cls: "warn" },
+  { text: "WARN: 1 unresolved access attempt.",    cls: "warn" },
+  { text: "ERR: ping timeout — node ECHO_7",      cls: "err"  },
+
+  // ── YOUR MESSAGES — add hints, clues, jokes, lore ──
+  { text: "Hint: check the second drawer on the left.", cls: "warn" },
+  // { text: "your message here",  cls: ""     },
+  // { text: "your hint here",     cls: "warn" },
+  // { text: "your warning here",  cls: "err"  },
+];
+// ══════════════════════════════════════════════════════════════════
+
+let sysMsgIndex = Math.floor(Math.random() * ALL_SYS_MESSAGES.length);
+let sysMsgTyping = false;
+
+function rotateSysMsg() {
+  if (sysMsgTyping) return; // don't interrupt if typing is in progress
+  let next;
+  do { next = Math.floor(Math.random() * ALL_SYS_MESSAGES.length); } while (next === sysMsgIndex);
+  sysMsgIndex = next;
+  const m = ALL_SYS_MESSAGES[sysMsgIndex];
+  const line = document.getElementById('sys-msg-line');
+  if (!line) return;
+
+  line.className = 'sys-msg-line' + (m.cls ? ' ' + m.cls : '');
+  line.innerHTML = `<span class="sys-msg-dot"></span><div class="sys-msg-text-wrap"><span id="sys-msg-text"></span></div>`;
+
+  // type character by character
+  const target = document.getElementById('sys-msg-text');
+  const wrap = line.querySelector('.sys-msg-text-wrap');
+  const chars = m.text.split('');
+  let i = 0;
+  sysMsgTyping = true;
+
+  target.style.display = 'inline-block';
+  target.style.transform = 'translateX(0)';
+  target.style.transition = 'none';
+
+  function typeChar() {
+    if (i < chars.length) {
+      target.textContent += chars[i++];
+      // slide text left when it overflows so the end stays visible
+      if (target.scrollWidth > wrap.clientWidth) {
+        const dist = target.scrollWidth - wrap.clientWidth;
+        target.style.transform = `translateX(-${dist}px)`;
+      }
+      setTimeout(typeChar, 55);
+    } else {
+      sysMsgTyping = false;
+    }
+  }
+  typeChar();
+}
+setInterval(rotateSysMsg, 4500);
+
+// ══════════════════════════════════════════════════════════════════
+//  SIMPLE COMMANDS — one word in, one line out
+//  Add as many lines as you want in the same format.
+//  Reply type: "out" (green) | "info" (yellow) | "err" (red)
+// ══════════════════════════════════════════════════════════════════
+const SIMPLE_COMMANDS = [
+  { cmd: "hi",    reply: "Hello, human.",                      t: "out"  },
+  { cmd: "hello", reply: "Hello, human.",                      t: "out"  },
+  { cmd: "who",   reply: "That's classified.",                 t: "warn" },
+  { cmd: "why",    reply: "You don't have clearance for that.",      t: "warn" },
+  { cmd: "exit",   reply: "Nice try.",                               t: "err"  },
+  { cmd: "sudo",   reply: "Permission denied.",                      t: "err"  },
+  // { cmd: "your command", reply: "your reply", t: "out" },
+];
+// ══════════════════════════════════════════════════════════════════
+
+const TERMINAL_COMMANDS = {
+  ping: (args) => {
+    const host = args[0] || '127.0.0.1';
+    return [
+      { t: 'out',  text: `PING ${host}: 56 data bytes` },
+      { t: 'out',  text: `64 bytes from ${host}: icmp_seq=0 ttl=64 time=0.412 ms` },
+      { t: 'out',  text: `64 bytes from ${host}: icmp_seq=1 ttl=64 time=0.388 ms` },
+      { t: 'out',  text: `64 bytes from ${host}: icmp_seq=2 ttl=64 time=0.401 ms` },
+      { t: 'out',  text: `--- ${host} ping statistics: 3 packets transmitted, 3 received, 0% loss` },
+    ];
+  },
+  whoami: () => [
+    { t: 'out', text: 'FIELD AGENT #7714  //  CLEARANCE: DYNAMIC' },
+  ],
+  status: () => [
+    { t: 'out',  text: `Uptime: 06d 14h ${new Date().getMinutes()}m` },
+    { t: 'out',  text: `Folders unlocked: ${unlockedFolders.size} / ${FOLDERS.length}` },
+    { t: unlockedFolders.size === FOLDERS.length ? 'out' : 'warn',
+      text: unlockedFolders.size === FOLDERS.length
+        ? 'All files decrypted. Mission status: COMPLETE.'
+        : `WARNING: ${FOLDERS.length - unlockedFolders.size} folder(s) still encrypted.` },
+  ],
+  ls: () => {
+    const lines = FOLDERS.map(f => ({
+      t: unlockedFolders.has(f.id) ? 'out' : 'warn',
+      text: `${unlockedFolders.has(f.id) ? 'drwxr-x---' : 'drwx------'}  ${f.id.toUpperCase()}  [${unlockedFolders.has(f.id) ? 'OPEN' : 'LOCKED'}]`
+    }));
+    return [{ t: 'out', text: 'total ' + FOLDERS.length }, ...lines];
+  },
+  date: () => [
+    { t: 'out', text: new Date().toUTCString().replace('GMT', 'UTC') },
+  ],
+  clear: () => '__clear__',
+  override: (args) => {
+    const sub = args[0];
+    const num = parseInt(args[1]);
+
+    // override with no args — show command list
+    if (!sub) return [
+      { t: 'info', text: '══ OVERRIDE MODE — GM COMMANDS ══════════════════' },
+      { t: 'info', text: '  override unlock [1-4]   — unlock folder by number' },
+      { t: 'info', text: '  override unlock all     — unlock all folders' },
+      { t: 'info', text: '  override lock [1-4]     — lock folder by number' },
+      { t: 'info', text: '  override lock all       — lock all folders' },
+      { t: 'info', text: '  override hint [1-4]     — show password hint' },
+      { t: 'info', text: '  override passwd [1-4]   — show actual password' },
+      { t: 'info', text: '  override skip           — unlock everything at once' },
+      { t: 'info', text: '  override reset          — full session reset' },
+      { t: 'info', text: '  override name [name]    — change operator name in header' },
+      { t: 'info', text: '═════════════════════════════════════════════════' },
+    ];
+
+    if (sub === 'unlock') {
+      if (args[1] === 'all') {
+        FOLDERS.forEach(f => unlockedFolders.add(f.id));
+        updateStats(); updateProgress(); renderFolders();
+        return [{ t: 'info', text: 'OVERRIDE: all folders unlocked.' }];
+      }
+      const f = FOLDERS[num - 1];
+      if (!f) return [{ t: 'err', text: `No folder #${num}. Valid: 1-${FOLDERS.length}` }];
+      unlockedFolders.add(f.id);
+      updateStats(); updateProgress(); renderFolders();
+      return [{ t: 'info', text: `OVERRIDE: "${f.name}" — unlocked.` }];
+    }
+
+    if (sub === 'lock') {
+      if (args[1] === 'all') {
+        unlockedFolders.clear();
+        updateStats(); updateProgress(); renderFolders();
+        return [{ t: 'info', text: 'OVERRIDE: all folders locked.' }];
+      }
+      const f = FOLDERS[num - 1];
+      if (!f) return [{ t: 'err', text: `No folder #${num}. Valid: 1-${FOLDERS.length}` }];
+      unlockedFolders.delete(f.id);
+      updateStats(); updateProgress(); renderFolders();
+      return [{ t: 'info', text: `OVERRIDE: "${f.name}" — locked.` }];
+    }
+
+    if (sub === 'hint') {
+      const f = FOLDERS[num - 1];
+      if (!f) return [{ t: 'err', text: `No folder #${num}.` }];
+      return [{ t: 'info', text: `HINT #${num}: ${f.hint}` }];
+    }
+
+    if (sub === 'passwd') {
+      const f = FOLDERS[num - 1];
+      if (!f) return [{ t: 'err', text: `No folder #${num}.` }];
+      return [{ t: 'info', text: `PASSWD #${num}: ${f.password}` }];
+    }
+
+    if (sub === 'skip') {
+      FOLDERS.forEach(f => unlockedFolders.add(f.id));
+      updateStats(); updateProgress(); renderFolders();
+      return [
+        { t: 'info', text: 'OVERRIDE: skip engaged — all folders unlocked.' },
+        { t: 'warn', text: 'WARNING: mission integrity compromised.' },
+      ];
+    }
+
+    if (sub === 'reset') {
+      unlockedFolders.clear();
+      updateStats(); updateProgress(); renderFolders();
+      clearLive();
+      return [{ t: 'info', text: 'OVERRIDE: session reset. All folders locked.' }];
+    }
+
+    if (sub === 'name') {
+      const newName = args.slice(1).join(' ').toUpperCase();
+      if (!newName) return [{ t: 'err', text: 'Usage: override name AGENT_NAME' }];
+      document.querySelector('.status-online').textContent = newName;
+      return [{ t: 'info', text: `OVERRIDE: operator name set to "${newName}".` }];
+    }
+
+    return [{ t: 'err', text: `Unknown override subcommand: ${sub}. Type 'override' for list.` }];
+  },
+  restore: () => {
+    window.open('quiz.html', '_blank');
+    return [
+      { t: 'info', text: 'RESTORE PROTOCOL initiated.' },
+      { t: 'out',  text: 'Launching authentication terminal...' },
+    ];
+  },
+  help: () => [
+    { t: 'out',  text: 'Available commands:' },
+    { t: 'out',  text: '  ping [host]  — check connection to host' },
+    { t: 'out',  text: '  whoami       — show current operator' },
+    { t: 'out',  text: '  status       — mission and system status' },
+    { t: 'out',  text: '  ls           — list classified folders' },
+    { t: 'out',  text: '  date         — current UTC timestamp' },
+    { t: 'out',  text: '  clear        — clear live log' },
+    { t: 'out',  text: '  help         — show this list' },
+  ],
+};
+
+function handleTerminalInput() {
+  const input = document.getElementById('terminal-input');
+  const raw = input.value.trim();
+  input.value = '';
+  if (!raw) return;
+  soundType();
+
+  const [cmd, ...args] = raw.toLowerCase().split(/\s+/);
+  const live = document.getElementById('t-live');
+  const tbox = document.getElementById('terminal-log');
+
+  // remove cursor line
+  const last = live.lastElementChild;
+  if (last && last.querySelector('.cursor')) last.remove();
+
+  // echo the typed command
+  const cmdDiv = document.createElement('div');
+  cmdDiv.innerHTML = `<span class="t-prompt">operator@cia-secure:~$ </span><span class="t-cmd">${raw}</span>`;
+  live.appendChild(cmdDiv);
+
+  const simple = SIMPLE_COMMANDS.find(x => x.cmd === cmd);
+  const handler = TERMINAL_COMMANDS[cmd];
+
+  if (simple) {
+    const d = document.createElement('div');
+    d.className = 't-' + simple.t;
+    d.textContent = simple.reply;
+    live.appendChild(d);
+    bumpCounter();
+  } else if (!handler) {
+    const err = document.createElement('div');
+    err.className = 't-err';
+    err.textContent = `bash: ${cmd}: command not found. Type 'help' for available commands.`;
+    live.appendChild(err);
+  } else {
+    const result = handler(args);
+    if (result === '__clear__') {
+      clearLive();
+      input.focus();
+      return;
+    }
+    result.forEach(line => {
+      const d = document.createElement('div');
+      d.className = 't-' + line.t;
+      d.textContent = line.text;
+      live.appendChild(d);
+    });
+    bumpCounter();
+  }
+
+  // re-append cursor line
+  const cur = document.createElement('div');
+  cur.innerHTML = `<span class="t-prompt">sys@cia-secure:~$ </span><span class="t-cmd">await_operator... <span class="cursor"></span></span>`;
+  live.appendChild(cur);
+  tbox.scrollTop = tbox.scrollHeight;
+}
+
+// ── PROGRESS BAR ──
+function initProgressDots() {
+  const dots = document.getElementById('progress-dots');
+  dots.innerHTML = '';
+  for (let i = 0; i < FOLDERS.length; i++) {
+    const d = document.createElement('div');
+    d.className = 'progress-dot';
+    d.id = 'pdot-' + i;
+    dots.appendChild(d);
+  }
+}
+function updateProgress() {
+  const pct = (unlockedFolders.size / FOLDERS.length) * 100;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  for (let i = 0; i < FOLDERS.length; i++) {
+    const dot = document.getElementById('pdot-' + i);
+    if (dot) dot.classList.toggle('filled', i < unlockedFolders.size);
+  }
+}
+
+// ── SESSION EVENT COUNTER ──
+let sessionEventCount = 0;
+function bumpCounter() {
+  sessionEventCount++;
+  const el = document.getElementById('session-counter');
+  if (el) el.textContent = sessionEventCount;
+}
+
+// ── CLEAR LIVE LOG ──
+function clearLive() {
+  soundClick();
+  const live = document.getElementById('t-live');
+  live.innerHTML = `<div><span class="t-prompt">sys@cia-secure:~$ </span><span class="t-cmd">await_operator... <span class="cursor"></span></span></div>`;
+  sessionEventCount = 0;
+  const el = document.getElementById('session-counter');
+  if (el) el.textContent = '0';
+}
+
+// Init
+initProgressDots();
+renderFolders();
+renderPinned();
+renderTerminalHistory();
+</script>
+</body>
+</html>
