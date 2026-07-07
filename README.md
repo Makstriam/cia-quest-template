@@ -36,7 +36,6 @@
 - **Authentication quiz** (`quiz.html`) — Q&A terminal that players must pass to gain access
 - **Scripted sound system** — cue live actors or build atmosphere with timed ambient sounds
 - **GM override commands** — host-only terminal commands to unlock, lock, hint, or reset on the fly
-- **Agent Notes** — players can type notes directly in the sidebar; saved across page refreshes
 
 ---
 
