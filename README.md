@@ -181,3 +181,7 @@ Demo walkthrough with passwords and answers: [`docs/DEMO.md`](docs/DEMO.md)
 ## License
 
 MIT — use it, modify it, run your own quests.
+
+---
+
+If this template saved you time, you can [buy me a coffee ☕](https://ko-fi.com/makstriam)
