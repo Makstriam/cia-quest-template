@@ -41,6 +41,8 @@
 
 ## Getting started
 
+**[Live demo →](https://makstriam.github.io/cia-quest-template/)**
+
 1. Download or clone this repository
 2. Open `index.html` in Chrome, Firefox, or Edge
 3. That's it — the demo quest is ready to play
